@@ -1,9 +1,9 @@
 from llama_index.core.tools import FunctionTool
-from llama_index.llms.ollama import Ollama
+
 from llama_index.core.agent import ReActAgent
 import arxiv
 import os
-
+from llama_index.llms.ollama import Ollama
 llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
 
 
@@ -115,7 +115,13 @@ search_paper_tool = FunctionTool.from_defaults(fn=search_paper,
                                                     )
 
 
-agent = ReActAgent.from_tools([download_paper_tool, search_paper_tool], llm=llm, verbose=True, max_iterations=100)
+agent = ReActAgent.from_tools([download_paper_tool, search_paper_tool], llm=llm, verbose=False, max_iterations=100)
+
+
 
 while True:
-    print("ME"+agent.chat(input()))
+    text_input = input("User: ")
+    if text_input == "exit":
+        break
+    response = agent.chat(text_input)
+    print(f"Agent: {response}")
