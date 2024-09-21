@@ -88,6 +88,7 @@ class PrivateFileService:
         # Insert the documents into the index
         if isinstance(current_index, LlamaCloudIndex):
             from app.engine.service import LLamaCloudFileService
+            
 
             project_id = current_index._get_project_id()
             pipeline_id = current_index._get_pipeline_id()
