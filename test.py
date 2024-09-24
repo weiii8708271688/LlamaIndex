@@ -152,45 +152,86 @@ from llama_index.core.node_parser import SentenceSplitter
 
 
 
-
-
-node_parser = SentenceSplitter()
-all_nodes = []
-all_tools = []
-paper_titles = os.listdir('./data/pdf')
-paper_titles = [title.split('.pdf')[0] for title in paper_titles if title.endswith('.pdf')]
-for paper_title in paper_titles:
+def create_a_agent(options='b'):
+    all_tools = []
     vector_index = load_index_from_storage(
-            StorageContext.from_defaults(persist_dir=f"./storage/{paper_title}"),
+        StorageContext.from_defaults(persist_dir=f"./storage/uber"),
+    )
+    all_tools.append(QueryEngineTool(
+        query_engine=vector_index.as_query_engine(llm=Settings.llm),
+        metadata=ToolMetadata(
+            name="uber_10k",
+            description=(
+                "Provides information about Uber financials for year 2021. "
+                "Use a detailed plain text question as input to the tool."
+            ),
+        ),
+    ))
+    if options == 'a':
+        vector_index = load_index_from_storage(
+            StorageContext.from_defaults(persist_dir=f"./storage/lyft"),
         )
-    vector_query_engine = vector_index.as_query_engine(llm=Settings.llm)
-    query_engine_tools = QueryEngineTool(
-            query_engine=vector_query_engine,
+        all_tools.append(QueryEngineTool(
+            query_engine=vector_index.as_query_engine(llm=Settings.llm),
             metadata=ToolMetadata(
-                name=f"vertice_tool",
-                description = ("""
-                                Useful for answering questions about academic paper - {paper_title}. This tool can provide information on various aspects of a given paper, including but not limited to:
-                                The main research question or hypothesis
-                                Methodology and experimental design
-                                Key findings and results
-                                Theoretical framework and background
-                                Implications and conclusions
-                                Related work and literature review
-                                Limitations and future research directions
-                                Use a specific question about the paper as input to this tool."
-                               """
+                name="lyft_10k",
+                description=(
+                    "Provides information about Lyft financials for year 2021. "
+                    "Use a detailed plain text question as input to the tool."
                 ),
             ),
+        ))
+        a_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=100)
+        return QueryEngineTool(
+            query_engine=a_agent,
+            metadata=ToolMetadata(
+                name=f"tool_a_agent",
+                description="This agent can provide information about Uber and Lyft financials for the year 2021.",
+            ),
         )
-    all_tools.append(query_engine_tools)
-all_tools.append(download_paper_tool)
-all_tools.append(search_paper_tool)
-all_tools.append(read_paper_tool)
-agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=100)
-agent.chat_history
+    a_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=100)
+    return QueryEngineTool(
+            query_engine=a_agent,
+            metadata=ToolMetadata(
+                name=f"tool_a_agent",
+                description="This agent can provide information about Uber financials for the year 2021.",
+            ),
+        )
+
+def create_b_agent():
+    all_tools = []
+    all_tools.append(download_paper_tool)
+    all_tools.append(search_paper_tool)
+    all_tools.append(read_paper_tool)
+    b_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=100, metadata=ToolMetadata(name="", description=""))
+    return QueryEngineTool(
+            query_engine=b_agent,
+            metadata=ToolMetadata(
+                name=f"b_agent_tool",
+                description="This agent can download, search, and read academic papers from the arXiv repository.",
+            ),
+        )
+
+
+a_agent = None # 這個是主要的腦
+b_agent = None # 這個是找資料的進大腦的
+c_agent = None # 這個是主持人
+a_agent_tool = create_a_agent()
+b_agent_tool = create_b_agent()
+
+c_agent = ReActAgent.from_tools([a_agent_tool, b_agent_tool], llm=llm, verbose=True, max_iterations=100, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
+
 while True:
     text_input = input("User: ")
     if text_input == "exit":
         break
-    response = agent.chat(text_input)
+    response = c_agent.chat(text_input)
     print(f"Agent: {response}")
+    a_agent_tool = create_a_agent('a')
+    CHAT_HISTORY = c_agent.chat_history
+    c_agent = ReActAgent.from_tools([a_agent_tool, b_agent_tool], chat_history=CHAT_HISTORY ,llm=llm, verbose=True, max_iterations=100, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
+
+
+
+# What was Lyft's revenue growth in 2021?
+# What was Uber's revenue growth in 2021?

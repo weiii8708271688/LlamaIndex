@@ -28,7 +28,7 @@ Settings.llm = Ollama(model="llama3:latest", request_timeout=120.0)
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 parser = LlamaParse(
-    api_key="llx-tIeANhGTiFwsFqCxWiL0tUe07FF4KshEtckrClY7J5vX2r8z",
+    api_key="llx-",
     result_type="markdown",
     verbose=True,
 )
