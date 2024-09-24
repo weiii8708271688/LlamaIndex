@@ -213,8 +213,8 @@ def create_a_agent():
 a_agent = None # 這個是主要的腦
 b_agent = None # 這個是找資料的進大腦的
 c_agent = None # 這個是主持人
-a_agent_tool = create_a_agent()
-b_agent_tool = create_b_agent()
+a_agent = create_a_agent()
+b_agent = create_b_agent()
 
 c_agent = ReActAgent.from_tools([a_agent, b_agent], llm=llm, verbose=True, max_iterations=10, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
 
