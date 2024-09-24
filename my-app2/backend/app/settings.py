@@ -44,7 +44,7 @@ def init_ollama():
         os.getenv("OLLAMA_REQUEST_TIMEOUT", DEFAULT_REQUEST_TIMEOUT)
     )
     Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-    Settings.llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
+    Settings.llm = Ollama(model="llama3.1:70b", request_timeout=300.0)
 
 """
 def init_openai():

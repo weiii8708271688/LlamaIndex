@@ -31,7 +31,7 @@ def create_workflow(chat_history: Optional[List[ChatMessage]] = None):
         system_prompt="You are an expert in reviewing blog posts. You are given a task to review a blog post. Review the post for logical inconsistencies, ask critical questions, and provide suggestions for improvement. Furthermore, proofread the post for grammar and spelling errors. Only if the post is good enough for publishing, then you MUST return 'The post is good.'. In all other cases return your review.",
         chat_history=chat_history,
     )
-    workflow = BlogPostWorkflow(timeout=360)
+    workflow = BlogPostWorkflow(timeout=99999)
     workflow.add_workflows(researcher=researcher, writer=writer, reviewer=reviewer)
     return workflow
 

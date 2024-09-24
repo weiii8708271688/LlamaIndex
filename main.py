@@ -174,14 +174,13 @@ obj_index = ObjectIndex.from_objects(
     index_cls=VectorStoreIndex,
 )
 
+
 top_agent = ReActAgent.from_tools(
     max_iterations=100,
     tool_retriever=obj_index.as_retriever(similarity_top_k=3),
     system_prompt=""" \
-You are an agent designed to answer queries about a set of given paper.
-Please always use the tools provided to answer a question. Do not rely on prior knowledge.\
-
-""",
+    You are an agent designed to answer queries about paper.
+    """,
     verbose=True,
 )
 

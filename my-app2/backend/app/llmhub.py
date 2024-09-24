@@ -60,3 +60,4 @@ def init_llmhub():
     #Settings.embed_model = TSIEmbedding(**embedding_configs)
     Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
     Settings.llm = Ollama(model="llama3:latest", request_timeout=120.0)
++
