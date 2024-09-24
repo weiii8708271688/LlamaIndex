@@ -6,12 +6,23 @@ import os
 from llama_index.llms.ollama import Ollama
 from llama_index.core import Settings
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core import (
+    VectorStoreIndex,
+    SimpleKeywordTableIndex,
+    SimpleDirectoryReader,
+)
 llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
 Settings.llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 
 
+parser = LlamaParse(
+    api_key=os.getenv('LLX_API_KEY'),
+    result_type="markdown",
+    verbose=True,
+)
+from llama_parse import LlamaParse
 
 
 
@@ -25,6 +36,14 @@ def download_paper(paper_id: str) -> str:
         
         # 下載PDF
         paper.download_pdf(filename=f"data/pdf/{paper.title}.pdf")
+        paper_docs = parser.load_data(f"./data/pdf/{paper.title}.pdf")
+        # build index
+        paper_index = VectorStoreIndex.from_documents(paper_docs)
+
+        # persist index
+        paper_index.storage_context.persist(persist_dir=f"./storage/{paper.title}")
+
+        #然後這邊要把這個index弄到B agent裡面 B agent應該要是一個全域變數之類的
         
         return(f"成功下載論文: {paper.title} [{paper_id}]")
     except Exception as e:
@@ -152,65 +171,43 @@ from llama_index.core.node_parser import SentenceSplitter
 
 
 
-def create_a_agent(options='b'):
+def create_b_agent(options='b'):
     all_tools = []
-    vector_index = load_index_from_storage(
-        StorageContext.from_defaults(persist_dir=f"./storage/uber"),
-    )
-    all_tools.append(QueryEngineTool(
-        query_engine=vector_index.as_query_engine(llm=Settings.llm),
-        metadata=ToolMetadata(
-            name="uber_10k",
-            description=(
-                "Provides information about Uber financials for year 2021. "
-                "Use a detailed plain text question as input to the tool."
-            ),
-        ),
-    ))
-    if options == 'a':
+    paper_titles = os.listdir('./data/pdf')
+    paper_titles = [title.split('.pdf')[0] for title in paper_titles if title.endswith('.pdf')]
+    for paper_title in paper_titles:
         vector_index = load_index_from_storage(
-            StorageContext.from_defaults(persist_dir=f"./storage/lyft"),
+            StorageContext.from_defaults(persist_dir=f"./storage/{paper_title}"),
         )
+        vector_query_engine = vector_index.as_query_engine(llm=Settings.llm)
         all_tools.append(QueryEngineTool(
-            query_engine=vector_index.as_query_engine(llm=Settings.llm),
+            query_engine=vector_query_engine,
             metadata=ToolMetadata(
-                name="lyft_10k",
-                description=(
-                    "Provides information about Lyft financials for year 2021. "
-                    "Use a detailed plain text question as input to the tool."
+                name="vector_tool",
+                description = (
+        f"Useful for answering questions about the academic paper titled '{paper_title}'. "
+        "This tool can provide information on various aspects of the paper, including but not limited to:"
+        "\n- The main research question or hypothesis"
+        "\n- Methodology and experimental design"
+        "\n- Key findings and results"
+        "\n- Theoretical framework and background"
+        "\n- Implications and conclusions"
+        "\n- Related work and literature review"
+        "\n- Limitations and future research directions"
+        "\nUse a specific question about the paper as input to this tool."
                 ),
             ),
-        ))
-        a_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=100)
-        return QueryEngineTool(
-            query_engine=a_agent,
-            metadata=ToolMetadata(
-                name=f"tool_a_agent",
-                description="This agent can provide information about Uber and Lyft financials for the year 2021.",
-            ),
-        )
-    a_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=100)
-    return QueryEngineTool(
-            query_engine=a_agent,
-            metadata=ToolMetadata(
-                name=f"tool_a_agent",
-                description="This agent can provide information about Uber financials for the year 2021.",
-            ),
-        )
+        ),)
+    b_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=10)
+    return b_agent
 
-def create_b_agent():
+def create_a_agent():
     all_tools = []
     all_tools.append(download_paper_tool)
     all_tools.append(search_paper_tool)
     all_tools.append(read_paper_tool)
-    b_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=100, metadata=ToolMetadata(name="", description=""))
-    return QueryEngineTool(
-            query_engine=b_agent,
-            metadata=ToolMetadata(
-                name=f"b_agent_tool",
-                description="This agent can download, search, and read academic papers from the arXiv repository.",
-            ),
-        )
+    a_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=10, metadata=ToolMetadata(name="", description=""))
+    return a_agent
 
 
 a_agent = None # 這個是主要的腦
@@ -219,7 +216,7 @@ c_agent = None # 這個是主持人
 a_agent_tool = create_a_agent()
 b_agent_tool = create_b_agent()
 
-c_agent = ReActAgent.from_tools([a_agent_tool, b_agent_tool], llm=llm, verbose=True, max_iterations=100, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
+c_agent = ReActAgent.from_tools([a_agent, b_agent], llm=llm, verbose=True, max_iterations=10, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
 
 while True:
     text_input = input("User: ")
@@ -227,11 +224,12 @@ while True:
         break
     response = c_agent.chat(text_input)
     print(f"Agent: {response}")
-    a_agent_tool = create_a_agent('a')
+    b_agent = create_b_agent('a')
     CHAT_HISTORY = c_agent.chat_history
-    c_agent = ReActAgent.from_tools([a_agent_tool, b_agent_tool], chat_history=CHAT_HISTORY ,llm=llm, verbose=True, max_iterations=100, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
+    c_agent = ReActAgent.from_tools([a_agent, b_agent], chat_history=CHAT_HISTORY ,llm=llm, verbose=True, max_iterations=10, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents. not every task will use agent a or agent b, it will depend on the task.Maybe you can ask llm to help you with the task without using agent.")
 
 
 
 # What was Lyft's revenue growth in 2021?
 # What was Uber's revenue growth in 2021?
+# Base on above chat_history. Compare the revenue growth of Uber and Lyft in 2021.
