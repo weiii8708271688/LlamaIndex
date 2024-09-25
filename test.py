@@ -16,13 +16,13 @@ Settings.llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 
-
+from llama_parse import LlamaParse
 parser = LlamaParse(
-    api_key=os.getenv('LLX_API_KEY'),
+    api_key="llx-",
     result_type="markdown",
     verbose=True,
 )
-from llama_parse import LlamaParse
+
 
 
 
@@ -171,9 +171,9 @@ from llama_index.core.node_parser import SentenceSplitter
 
 
 
-def create_b_agent(options='b'):
+def create_b_agent():
     all_tools = []
-    paper_titles = os.listdir('./data/pdf')
+    paper_titles = os.listdir('./storage')
     paper_titles = [title.split('.pdf')[0] for title in paper_titles if title.endswith('.pdf')]
     for paper_title in paper_titles:
         vector_index = load_index_from_storage(
@@ -199,6 +199,7 @@ def create_b_agent(options='b'):
             ),
         ),)
     b_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=10)
+    QueryEngineTool()
     return b_agent
 
 def create_a_agent():
@@ -217,16 +218,17 @@ a_agent = create_a_agent()
 b_agent = create_b_agent()
 
 c_agent = ReActAgent.from_tools([a_agent, b_agent], llm=llm, verbose=True, max_iterations=10, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
-
+CHAT_HISTORY = []
 while True:
     text_input = input("User: ")
     if text_input == "exit":
         break
     response = c_agent.chat(text_input)
     print(f"Agent: {response}")
-    b_agent = create_b_agent('a')
-    CHAT_HISTORY = c_agent.chat_history
-    c_agent = ReActAgent.from_tools([a_agent, b_agent], chat_history=CHAT_HISTORY ,llm=llm, verbose=True, max_iterations=10, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents. not every task will use agent a or agent b, it will depend on the task.Maybe you can ask llm to help you with the task without using agent.")
+    b_agent = create_b_agent()
+    chat = f"'user':{text_input}, 'agent':{response}"
+    CHAT_HISTORY.append(chat)
+    c_agent = ReActAgent.from_tools([a_agent, b_agent] ,llm=llm, verbose=True, max_iterations=10, system_prompt=f"You are the host. Here are chat history {CHAT_HISTORY}. You are responsible for managing the conversation between the user and the agents. not every task will use agent a or agent b, it will depend on the task.Maybe you can ask llm to help you with the task without using agent.")
 
 
 

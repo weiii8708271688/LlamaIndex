@@ -1,7 +1,5 @@
 import asyncio
 from typing import AsyncGenerator, List, Optional
-
-
 from llama_index.core.workflow import (
     Context,
     Event,
@@ -12,118 +10,198 @@ from llama_index.core.workflow import (
 )
 from llama_index.core.chat_engine.types import ChatMessage
 from app.agents.single import AgentRunEvent, AgentRunResult, FunctionCallingAgent
-from app.examples.researcher import create_researcher
+
+
+
+
+def download_paper(paper_id: str) -> str:
+    try:
+        search = arxiv.Search(id_list=[paper_id])
+        paper = next(search.results())
+        
+        # 創建下載目錄
+        os.makedirs("downloaded_papers", exist_ok=True)
+        
+        # 下載PDF
+        paper.download_pdf(filename=f"data/pdf/{paper.title}.pdf")
+        paper_docs = parser.load_data(f"./data/pdf/{paper.title}.pdf")
+        # build index
+        paper_index = VectorStoreIndex.from_documents(paper_docs)
+
+        # persist index
+        paper_index.storage_context.persist(persist_dir=f"./storage/{paper.title}")
+
+        #然後這邊要把這個index弄到B agent裡面 B agent應該要是一個全域變數之類的
+        
+        return(f"成功下載論文: {paper.title} [{paper_id}]")
+    except Exception as e:
+        return(f"下載論文 {paper_id} 時發生錯誤: {str(e)}")
+
+def search_paper(query: str) -> str:
+    try:
+        search = arxiv.Search(query=query, max_results = 5)
+        results = []
+        for result in search.results():
+            results.append(f"Title: {result.title}, ID: {result.entry_id.split('/')[-1]}")
+        return "\n".join(results) if results else "No papers found."
+    except Exception as e:
+        return f"Error searching for papers with query '{query}': {str(e)}"
+    
+def read_paper(paper_id: str) -> str:
+    try:
+        search = arxiv.Search(id_list=[paper_id])
+        paper = next(search.results())
+        ret = []
+        ret.append(paper.authors)
+        ret.append(paper.title)
+        ret.append(paper.summary)  
+        ret.append(paper.published)
+        ret.append(paper.updated)
+        
+        return ret
+    except Exception as e:
+        return f"Error reading paper with ID '{paper_id}': {str(e)}"
+
+download_paper_tool = FunctionTool.from_defaults(fn=download_paper,
+                                                 description="""The download_paper function is designed to download academic papers from the arXiv repository. Here's a detailed description of its functionality:
+
+                                                                Purpose: This function downloads a specific paper from arXiv given its ID and saves it as a PDF file.
+                                                                Parameters:
+
+                                                                paper_id (str): The arXiv ID of the paper to be downloaded. ID is all number there is no letter in it.
+
+
+                                                                Workflow:
+
+                                                                It uses the arxiv.Search class to search for the paper using the provided ID.
+                                                                It retrieves the first (and should be the only) result from the search.
+                                                                It creates a directory named "downloaded_papers" if it doesn't already exist.
+                                                                It then downloads the PDF of the paper, saving it in the "data" directory with the paper's title as the filename.
+
+
+                                                                Error Handling:
+
+                                                                The function is wrapped in a try-except block to catch and handle any exceptions that may occur during the download process.
+                                                                If an error occurs, it prints an error message including the paper ID and the specific error encountered.
+
+
+                                                                Output:
+
+                                                                On successful download, it prints a success message with the paper ID.
+                                                                On failure, it prints an error message detailing the issue.
+
+
+                                                                Note:
+
+                                                                The function doesn't return any value (returns None).
+                                                                It assumes the existence of an 'arxiv' module and appropriate permissions to create directories and write files.
+
+
+
+                                                                This function is useful in automating the process of downloading academic papers from arXiv, which can be particularly helpful in research tasks, literature reviews, or building a corpus of academic papers for further analysis.
+                                                                """
+                                                 )
+
+
+search_paper_tool = FunctionTool.from_defaults(fn=search_paper,
+                                               description="""The search_paper function is designed to search for academic papers on the arXiv repository based on a query string. Here's a detailed description of its functionality:
+
+                                                                Purpose: This function searches for papers on arXiv using a query string and returns a list of titles and IDs of the matching papers.
+                                                                Parameters:
+
+                                                                query (str): The search query string. string must translate to English first
+
+
+                                                                Workflow:
+
+                                                                It uses the arxiv.Search class to search for papers using the provided query string.string must translate to English first
+                                                                It iterates through the search results and collects the titles and IDs of the matching papers.
+                                                                It returns a formatted string containing the titles and IDs of the matching papers.
+
+
+                                                                Error Handling:
+
+                                                                The function is wrapped in a try-except block to catch and handle any exceptions that may occur during the search process.
+                                                                If an error occurs, it returns an error message including the query string and the specific error encountered.
+
+
+                                                                Output:
+
+                                                                On successful search, it returns a formatted string containing the titles and IDs of the matching papers.
+                                                                On failure, it returns an error message detailing the issue.
+
+
+                                                                Note:
+
+                                                                The function assumes the existence of an 'arxiv' module and appropriate permissions to access the internet.
+
+
+                                                                This function is useful in automating the process of searching for academic papers on arXiv, which can be particularly helpful in research tasks, literature reviews, or building a corpus of academic papers for further analysis.
+                                                                """
+                                                    )
+
+read_paper_tool = FunctionTool.from_defaults(fn=read_paper,
+
+
+
 
 
 def create_workflow(chat_history: Optional[List[ChatMessage]] = None):
-    researcher = create_researcher(
+    searcher = FunctionCallingAgent(
+        name="searcher",
+        role="專業文獻搜尋專家",
+        system_prompt="你是一個專業的文獻搜尋專家。你的任務是根據給定的主題或關鍵詞搜索相關的學術文獻。請提供文獻的標題、作者、發表年份和簡短摘要。",
         chat_history=chat_history,
     )
-    writer = FunctionCallingAgent(
-        name="writer",
-        role="expert in writing blog posts",
-        system_prompt="""You are an expert in writing blog posts. You are given a task to write a blog post. Don't make up any information yourself.""",
+    reader = FunctionCallingAgent(
+        name="reader",
+        role="學術文獻分析專家",
+        system_prompt="你是一個學術文獻分析專家。你的任務是仔細閱讀和分析給定的文獻摘要，提取關鍵信息，並識別主要觀點和研究方法。",
+        tools=
         chat_history=chat_history,
     )
-    reviewer = FunctionCallingAgent(
-        name="reviewer",
-        role="expert in reviewing blog posts",
-        system_prompt="You are an expert in reviewing blog posts. You are given a task to review a blog post. Review the post for logical inconsistencies, ask critical questions, and provide suggestions for improvement. Furthermore, proofread the post for grammar and spelling errors. Only if the post is good enough for publishing, then you MUST return 'The post is good.'. In all other cases return your review.",
+    moderator = FunctionCallingAgent(
+        name="moderator",
+        role="研究項目協調員",
+        system_prompt="你是一個研究項目的協調員。你的任務是與用戶互動，理解他們的研究需求，整合其他專家的意見，並為用戶提供有價值的研究建議和總結。",
         chat_history=chat_history,
     )
-    workflow = BlogPostWorkflow(timeout=99999)
-    workflow.add_workflows(researcher=researcher, writer=writer, reviewer=reviewer)
+    workflow = ResearchWorkflow(timeout=99999)
+    workflow.add_workflows(searcher=searcher, reader=reader, moderator=moderator)
     return workflow
 
-
-class ResearchEvent(Event):
+class SearchEvent(Event):
     input: str
 
-
-class WriteEvent(Event):
-    input: str
-    is_good: bool = False
-
-
-class ReviewEvent(Event):
+class ReadEvent(Event):
     input: str
 
+class ModerateEvent(Event):
+    input: str
 
-class BlogPostWorkflow(Workflow):
+class ResearchWorkflow(Workflow):
     @step()
-    async def start(self, ctx: Context, ev: StartEvent) -> ResearchEvent:
-        # set streaming
+    async def start(self, ctx: Context, ev: StartEvent) -> SearchEvent:
         ctx.data["streaming"] = getattr(ev, "streaming", False)
-        # start the workflow with researching about a topic
-        ctx.data["task"] = ev.input
-        return ResearchEvent(input=f"Research for this task: {ev.input}")
+        ctx.data["research_topic"] = ev.input
+        return SearchEvent(input=f"搜索以下研究主題的相關文獻：{ev.input}")
 
     @step()
-    async def research(
-        self, ctx: Context, ev: ResearchEvent, researcher: FunctionCallingAgent
-    ) -> WriteEvent:
-        result: AgentRunResult = await self.run_agent(ctx, researcher, ev.input)
-        content = result.response.message.content
-        return WriteEvent(
-            input=f"Write a blog post given this task: {ctx.data['task']} using this research content: {content}"
-        )
+    async def search(self, ctx: Context, ev: SearchEvent, searcher: FunctionCallingAgent) -> ReadEvent:
+        result: AgentRunResult = await self.run_agent(ctx, searcher, ev.input)
+        literature_list = result.response.message.content
+        return ReadEvent(input=f"分析以下文獻列表：{literature_list}")
 
     @step()
-    async def write(
-        self, ctx: Context, ev: WriteEvent, writer: FunctionCallingAgent
-    ) -> ReviewEvent | StopEvent:
-        MAX_ATTEMPTS = 2
-        ctx.data["attempts"] = ctx.data.get("attempts", 0) + 1
-        too_many_attempts = ctx.data["attempts"] > MAX_ATTEMPTS
-        if too_many_attempts:
-            ctx.write_event_to_stream(
-                AgentRunEvent(
-                    name=writer.name,
-                    msg=f"Too many attempts ({MAX_ATTEMPTS}) to write the blog post. Proceeding with the current version.",
-                )
-            )
-        if ev.is_good or too_many_attempts:
-            # too many attempts or the blog post is good - stream final response if requested
-            result = await self.run_agent(
-                ctx, writer, ev.input, streaming=ctx.data["streaming"]
-            )
-            return StopEvent(result=result)
-        result: AgentRunResult = await self.run_agent(ctx, writer, ev.input)
-        ctx.data["result"] = result
-        return ReviewEvent(input=result.response.message.content)
+    async def read(self, ctx: Context, ev: ReadEvent, reader: FunctionCallingAgent) -> ModerateEvent:
+        result: AgentRunResult = await self.run_agent(ctx, reader, ev.input)
+        analysis = result.response.message.content
+        return ModerateEvent(input=f"根據以下分析與用戶討論研究方向：{analysis}")
 
     @step()
-    async def review(
-        self, ctx: Context, ev: ReviewEvent, reviewer: FunctionCallingAgent
-    ) -> WriteEvent:
-        result: AgentRunResult = await self.run_agent(ctx, reviewer, ev.input)
-        review = result.response.message.content
-        old_content = ctx.data["result"].response.message.content
-        post_is_good = "post is good" in review.lower()
-        ctx.write_event_to_stream(
-            AgentRunEvent(
-                name=reviewer.name,
-                msg=f"The post is {'not ' if not post_is_good else ''}good enough for publishing. Sending back to the writer{' for publication.' if post_is_good else '.'}",
-            )
-        )
-        if post_is_good:
-            return WriteEvent(
-                input=f"You're blog post is ready for publication. Please respond with just the blog post. Blog post: ```{old_content}```",
-                is_good=True,
-            )
-        else:
-            return WriteEvent(
-                input=f"""Improve the writing of a given blog post by using a given review.
-Blog post:
-```
-{old_content}
-``` 
-
-Review: 
-```
-{review}
-```"""
-            )
+    async def moderate(self, ctx: Context, ev: ModerateEvent, moderator: FunctionCallingAgent) -> StopEvent:
+        result = await self.run_agent(ctx, moderator, ev.input, streaming=ctx.data["streaming"])
+        return StopEvent(result=result)
 
     async def run_agent(
         self,
@@ -133,7 +211,6 @@ Review:
         streaming: bool = False,
     ) -> AgentRunResult | AsyncGenerator:
         task = asyncio.create_task(agent.run(input=input, streaming=streaming))
-        # bubble all events while running the executor to the planner
         async for event in agent.stream_events():
             ctx.write_event_to_stream(event)
         return await task
