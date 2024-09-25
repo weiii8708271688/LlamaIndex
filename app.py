@@ -7,6 +7,7 @@ from ai_research_assistant import AIResearchAssistant  # 導入您的 AIResearch
 from fastapi.responses import StreamingResponse
 import asyncio
 import json
+from typing import List, Dict, Any
 app = FastAPI()
 
 # 配置CORS
@@ -18,12 +19,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class VercelCompatibleResponse:
+    TEXT_PREFIX = "0:"
+    DATA_PREFIX = "8:"
+
+    @classmethod
+    def convert_text(cls, token: str) -> str:
+        escaped_token = json.dumps(token)
+        return f"{cls.TEXT_PREFIX}{escaped_token}\n"
+
+    @classmethod
+    def convert_data(cls, data: Dict[str, Any]) -> str:
+        data_str = json.dumps(data)
+        return f"{cls.DATA_PREFIX}[{data_str}]\n"
+
 async def stream_response(response: str):
-    # 模擬流式響應
-    for chunk in response.split():  # 這裡簡單地按單詞切分，您可能需要更複雜的邏輯
-        yield f"data: {json.dumps({'response': chunk})}\n\n"
-        await asyncio.sleep(0.1)  # 添加一些延遲以模擬真實的流式響應
-    yield f"data: [DONE]\n\n"
+    yield VercelCompatibleResponse.convert_text("")  # 開始流
+    
+    for chunk in response.split():  # 簡單按單詞分割，您可能需要更複雜的邏輯
+        yield VercelCompatibleResponse.convert_text(chunk)
+        await asyncio.sleep(0.1)  # 模擬延遲
+    
+    # 模擬事件輸出
+    event_data = {
+        "type": "agent",
+        "data": {"agent": "論文小幫手", "text": "Processing complete"}
+    }
+    yield VercelCompatibleResponse.convert_data(event_data)
+    
+    # 模擬建議問題
+    suggested_questions = ["What is the main topic of this paper?", "Can you summarize the key findings?"]
+    question_data = {
+        "type": "suggested_questions",
+        "data": suggested_questions
+    }
+    yield VercelCompatibleResponse.convert_data(question_data)
 
 # 初始化您的 AI 助手
 assistant = AIResearchAssistant()

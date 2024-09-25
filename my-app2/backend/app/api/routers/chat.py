@@ -33,8 +33,8 @@ async def chat(
         task = asyncio.create_task(
             agent.run(input=last_message_content, streaming=True)
         )
-
-        return VercelStreamResponse(request, task, agent.stream_events, data)
+        temp = VercelStreamResponse(request, task, agent.stream_events, data)
+        return temp
     except Exception as e:
         logger.exception("Error in agent", exc_info=True)
         raise HTTPException(

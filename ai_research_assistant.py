@@ -142,13 +142,13 @@ class AIResearchAssistant:
         )
 
     def chat(self, user_input: str) -> str:
-        """c_agent = self.create_c_agent()
+        c_agent = self.create_c_agent()
         response = c_agent.chat(user_input)
         self.chat_history.append(f"User: {user_input}")
-        self.chat_history.append(f"Agent: {response.response}")"""
-        response = "Test response"
+        self.chat_history.append(f"Agent: {response.response}")
         
-        return response
+        
+        return response.response
 
     def get_paper_titles(self):
         return self.title_list
