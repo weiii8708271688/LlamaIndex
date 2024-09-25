@@ -9,15 +9,16 @@ from llama_index.core import Settings, VectorStoreIndex, load_index_from_storage
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_parse import LlamaParse
 from llama_index.core.node_parser import SentenceSplitter
+from dotenv import load_dotenv
 
 # Initialize LLM and embedding model
 llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
 Settings.llm = llm
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-
+load_dotenv()  # 加載 .env 文件中的變量
 # Initialize LlamaParse
 parser = LlamaParse(
-    api_key="llx-",
+    api_key=os.getenv('LLAMA_PARSE_API_KEY'),
     result_type="markdown",
     verbose=True,
 )
