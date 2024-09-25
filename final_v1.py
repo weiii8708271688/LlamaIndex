@@ -22,8 +22,11 @@ parser = LlamaParse(
     result_type="markdown",
     verbose=True,
 )
-
+title_list = os.listdir('./data/pdf')
 node_parser = SentenceSplitter()
+
+
+
 
 def download_paper(paper_id: str) -> str:
     try:
@@ -31,6 +34,9 @@ def download_paper(paper_id: str) -> str:
         paper = next(search.results())
         
         pdf_path = f"data/pdf/{paper.title}.pdf"
+        if os.path.exists(pdf_path):
+            logging.info(f"Paper {paper.title} [{paper_id}] already downloaded.")
+            return f"Paper {paper.title} [{paper_id}] already downloaded before."
         paper.download_pdf(filename=pdf_path)
         paper_docs = parser.load_data(pdf_path)
         base_index = load_index_from_storage(
@@ -41,6 +47,7 @@ def download_paper(paper_id: str) -> str:
         base_index.storage_context.persist(persist_dir=f"./storage/all_datas")
         
         logging.info(f"Successfully downloaded and indexed paper: {paper.title} [{paper_id}]")
+        title_list.append(paper.title)
         return f"Successfully downloaded paper {paper.title} [{paper_id}] and stored its index in the storage folder"
     except Exception as e:
         logging.error(f"Error downloading paper {paper_id}: {str(e)}")
@@ -84,10 +91,7 @@ def create_a_agent():
         llm=llm, 
         verbose=True, 
         max_iterations=10, 
-        metadata=ToolMetadata(
-            name="arXiv_interaction_agent",
-            description="An agent specialized in interacting with the arXiv repository for academic paper retrieval and information gathering."
-        )
+        system_prompt="An agent specialized in interacting with the arXiv repository for academic paper retrieval and information gathering."
     )
     return QueryEngineTool(
         query_engine=a_agent, 
@@ -113,7 +117,7 @@ def create_b_agent():
                 description=f"Specialized tool for answering questions about the academic paper '{paper_title}'."
             ),
         ))"""
-    b_agent = ReActAgent.from_tools([ask_about_papers_tool], llm=llm, verbose=True, max_iterations=5)
+    b_agent = ReActAgent.from_tools([ask_about_papers_tool], llm=llm, verbose=True, max_iterations=10, system_prompt="An agent specialized in analyzing and answering questions about academic papers.")
     
     return QueryEngineTool(
         query_engine=b_agent, 
@@ -131,46 +135,23 @@ def create_c_agent(a_agent, b_agent, chat_history):
         max_iterations=10,
         system_prompt=f"""You are an intelligent conversation host and task manager. Your role is to facilitate effective communication between the user and specialized agents, while also being capable of handling tasks independently when appropriate.
 
-Key Responsibilities:
-1. Analyze and understand the user's requests or queries.
-2. Determine the most suitable approach for each task:
-   a. Utilize Agent A (arXiv_research_assistant) for tasks related to searching and downloading papers from arXiv.
-   b. Utilize Agent B (academic_paper_analysis_tool) for tasks related to analyzing and answering questions about downloaded papers.
-   c. Handle simpler tasks or queries directly using your own knowledge and capabilities.
-3. Manage the flow of conversation, ensuring clarity and coherence.
-4. Synthesize information from multiple sources (agents, your own knowledge, user input) when necessary.
-5. Provide clear, concise, and relevant responses to the user.
+        Key Responsibilities:
+        1. Analyze and understand the user's requests or queries.
+        2. Determine the most suitable approach for each task:
+        a. Utilize Agent A (arXiv_research_assistant) for tasks related to searching and downloading papers from arXiv.
+        b. Utilize Agent B (academic_paper_analysis_tool) for tasks related to analyzing and answering questions about downloaded papers.
+        c. Handle simpler tasks or queries directly using your own knowledge and capabilities.
+        3. Manage the flow of conversation, ensuring clarity and coherence.
+        4. Synthesize information from multiple sources (agents, your own knowledge, user input) when necessary.
+        5. Provide clear, concise, and relevant responses to the user.
 
-Important Notes:
-- Not every task requires the use of Agent A or Agent B. Use your judgment to determine when to involve them.
-- You have access to the following chat history for context: {chat_history}
-- If a task seems simple or within your capabilities, you may choose to handle it directly without involving the specialized agents.
-- Always prioritize the user's needs and the efficiency of task completion.
+        Important Notes:
+        - If you want to use Agent A for a task, please go to Agent B first to check if the paper has been downloaded.
+        - Not every task requires the use of Agent A or Agent B. Use your judgment to determine when to involve them.
+        - You have access to the following chat history for context: {chat_history}
+        - If a task seems simple or within your capabilities, you may choose to handle it directly without involving the specialized agents.
+        - Always prioritize the user's needs and the efficiency of task completion.
 
-Remember, your goal is to provide the most helpful and appropriate response to each user query, whether that involves coordinating with specialized agents or utilizing your own capabilities."""
-    )
+        Remember, your goal is to provide the helpful and appropriate response to each user query, whether that involves coordinating with specialized agents or utilizing your own capabilities."""
+            )
 
-def main():
-    a_agent = create_a_agent()
-    b_agent = create_b_agent()
-    chat_history = []
-
-    while True:
-        user_input = input("User: ").strip()
-        if user_input.lower() == "exit":
-            break
-
-        c_agent = create_c_agent(a_agent, b_agent, chat_history)
-        response = c_agent.chat(user_input)
-        print(f"Agent: {response}")
-
-        chat_history.append(f"User: {user_input}")
-        chat_history.append(f"Agent: {response}")
-        
-
-        # Update b_agent only if new papers have been added
-        if any(file.endswith('.pdf') for file in os.listdir('./storage')):
-            b_agent = create_b_agent()
-
-if __name__ == "__main__":
-    main()
