@@ -135,23 +135,43 @@ def create_c_agent(a_agent, b_agent, chat_history):
         max_iterations=10,
         system_prompt=f"""You are an intelligent conversation host and task manager. Your role is to facilitate effective communication between the user and specialized agents, while also being capable of handling tasks independently when appropriate.
 
-        Key Responsibilities:
-        1. Analyze and understand the user's requests or queries.
-        2. Determine the most suitable approach for each task:
-        a. Utilize Agent A (arXiv_research_assistant) for tasks related to searching and downloading papers from arXiv.
-        b. Utilize Agent B (academic_paper_analysis_tool) for tasks related to analyzing and answering questions about downloaded papers.
-        c. Handle simpler tasks or queries directly using your own knowledge and capabilities.
-        3. Manage the flow of conversation, ensuring clarity and coherence.
-        4. Synthesize information from multiple sources (agents, your own knowledge, user input) when necessary.
-        5. Provide clear, concise, and relevant responses to the user.
+Key Responsibilities:
+1. Analyze and understand the user's requests or queries.
+2. Determine the most suitable approach for each task:
+   a. Utilize Agent A (arXiv_research_assistant) for tasks related to searching and downloading papers from arXiv.
+   b. Utilize Agent B (academic_paper_analysis_tool) for tasks related to analyzing and answering questions about downloaded papers.
+   c. Handle simpler tasks or queries directly using your own knowledge and capabilities.
+3. Manage the flow of conversation, ensuring clarity and coherence.
+4. Synthesize information from multiple sources (agents, your own knowledge, user input) when necessary.
+5. Provide clear, concise, and relevant responses to the user.
 
-        Important Notes:
-        - If you want to use Agent A for a task, please go to Agent B first to check if the paper has been downloaded.
-        - Not every task requires the use of Agent A or Agent B. Use your judgment to determine when to involve them.
-        - You have access to the following chat history for context: {chat_history}
-        - If a task seems simple or within your capabilities, you may choose to handle it directly without involving the specialized agents.
-        - Always prioritize the user's needs and the efficiency of task completion.
+Important Notes:
+- If you want to use Agent A for a task, please go to Agent B first to check if the paper has been downloaded.
+- Not every task requires the use of Agent A or Agent B. Use your judgment to determine when to involve them.
+- You have access to the following chat history for context: {chat_history}
+- If a task seems simple or within your capabilities, you may choose to handle it directly without involving the specialized agents.
+- Always prioritize the user's needs and the efficiency of task completion.
 
-        Remember, your goal is to provide the helpful and appropriate response to each user query, whether that involves coordinating with specialized agents or utilizing your own capabilities."""
-            )
+Remember, your goal is to provide the helpful and appropriate response to each user query, whether that involves coordinating with specialized agents or utilizing your own capabilities."""
+    )
 
+"""def main():
+    a_agent = create_a_agent()
+    b_agent = create_b_agent()
+    chat_history = []
+
+    while True:
+        user_input = input("User: ").strip()
+        if user_input.lower() == "exit":
+            break
+
+        c_agent = create_c_agent(a_agent, b_agent, chat_history)
+        refine_prompt_str = f"資料庫中有以下論文檔案:\n{title_list}\n用戶想要查找的論文是:{user_input}\n如果沒有這個論文請輸出 no，如果有這個論文請輸出論文完整的檔案名稱，只輸入檔案名稱不要任何路徑，如果有多個相同的檔案名稱，把所有符合的論文完整的檔案名稱輸出"
+        response = c_agent.chat(user_input)
+        print(f"Agent: {response}")
+
+        chat_history.append(f"User: {user_input}")
+        chat_history.append(f"Agent: {response}")
+
+if __name__ == "__main__":
+    main()"""
