@@ -1,237 +1,109 @@
-from llama_index.core.tools import FunctionTool
-
-from llama_index.core.agent import ReActAgent
-import arxiv
-import os
-from llama_index.llms.ollama import Ollama
 from llama_index.core import Settings
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.core import (
-    VectorStoreIndex,
-    SimpleKeywordTableIndex,
-    SimpleDirectoryReader,
-)
+from llama_index.llms.ollama import Ollama
 llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
 Settings.llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 
-from llama_parse import LlamaParse
-parser = LlamaParse(
-    api_key="llx-",
-    result_type="markdown",
+from llama_index.core import SimpleDirectoryReader, VectorStoreIndex, ServiceContext
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.schema import IndexNode
+from llama_index.core.retrievers import RecursiveRetriever
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.retrievers import QueryFusionRetriever
+import  llama_index.core.chat_engine
+import os
+
+### Recipe
+### Build a recursive retriever that retrieves using small chunks
+### but passes associated larger chunks to the generation stage
+
+# load data
+pdfs = os.listdir("data/pdf")
+documents = SimpleDirectoryReader(
+  input_dir="data/pdf/"
+).load_data()
+
+# build parent chunks via NodeParser
+node_parser = SentenceSplitter(chunk_size=1024)
+base_nodes = node_parser.get_nodes_from_documents(documents)
+
+# define smaller child chunks
+sub_chunk_sizes = [256, 512]
+sub_node_parsers = [
+    SentenceSplitter(chunk_size=c, chunk_overlap=20) for c in sub_chunk_sizes
+]
+all_nodes = []
+for base_node in base_nodes:
+    for n in sub_node_parsers:
+        sub_nodes = n.get_nodes_from_documents([base_node])
+        sub_inodes = [
+            IndexNode.from_text_node(sn, base_node.node_id) for sn in sub_nodes
+        ]
+        all_nodes.extend(sub_inodes)
+    # also add original node to node
+    original_node = IndexNode.from_text_node(base_node, base_node.node_id)
+    all_nodes.append(original_node)
+
+# define a VectorStoreIndex with all of the nodes
+vector_index_chunk = VectorStoreIndex(
+    all_nodes
+)
+vector_index_chunk.storage_context.persist(persist_dir="./storage/all_datas")
+
+"""
+from llama_index.core import Settings, VectorStoreIndex, load_index_from_storage, StorageContext
+from llama_index.retrievers.bm25 import BM25Retriever
+vector_index_chunk = load_index_from_storage(
+        StorageContext.from_defaults(persist_dir="./storage/all_datas_v2"),
+    )
+vector_retriever_chunk = vector_index_chunk.as_retriever(similarity_top_k=2)
+bm25_retriever = BM25Retriever.from_defaults(
+    docstore=vector_index_chunk.docstore, similarity_top_k=2
+)
+# build RecursiveRetriever
+all_nodes_dict = {n.node_id: n for n in all_nodes}
+retriever_chunk = RecursiveRetriever(
+    "vector",
+    retriever_dict={"vector": vector_retriever_chunk},
+    node_dict=all_nodes_dict,
     verbose=True,
 )
-
-
-
-
-def download_paper(paper_id: str) -> str:
-    try:
-        search = arxiv.Search(id_list=[paper_id])
-        paper = next(search.results())
-        
-        # 創建下載目錄
-        os.makedirs("downloaded_papers", exist_ok=True)
-        
-        # 下載PDF
-        paper.download_pdf(filename=f"data/pdf/{paper.title}.pdf")
-        paper_docs = parser.load_data(f"./data/pdf/{paper.title}.pdf")
-        # build index
-        paper_index = VectorStoreIndex.from_documents(paper_docs)
-
-        # persist index
-        paper_index.storage_context.persist(persist_dir=f"./storage/{paper.title}")
-
-        #然後這邊要把這個index弄到B agent裡面 B agent應該要是一個全域變數之類的
-        
-        return(f"成功下載論文: {paper.title} [{paper_id}]")
-    except Exception as e:
-        return(f"下載論文 {paper_id} 時發生錯誤: {str(e)}")
-
-def search_paper(query: str) -> str:
-    try:
-        search = arxiv.Search(query=query, max_results = 5)
-        results = []
-        for result in search.results():
-            results.append(f"Title: {result.title}, ID: {result.entry_id.split('/')[-1]}")
-        return "\n".join(results) if results else "No papers found."
-    except Exception as e:
-        return f"Error searching for papers with query '{query}': {str(e)}"
-    
-def read_paper(paper_id: str) -> str:
-    try:
-        search = arxiv.Search(id_list=[paper_id])
-        paper = next(search.results())
-        ret = []
-        ret.append(paper.authors)
-        ret.append(paper.title)
-        ret.append(paper.summary)  
-        ret.append(paper.published)
-        ret.append(paper.updated)
-        
-        return ret
-    except Exception as e:
-        return f"Error reading paper with ID '{paper_id}': {str(e)}"
-
-download_paper_tool = FunctionTool.from_defaults(fn=download_paper,
-                                                 description="""The download_paper function is designed to download academic papers from the arXiv repository. Here's a detailed description of its functionality:
-
-                                                                Purpose: This function downloads a specific paper from arXiv given its ID and saves it as a PDF file.
-                                                                Parameters:
-
-                                                                paper_id (str): The arXiv ID of the paper to be downloaded. ID is all number there is no letter in it.
-
-
-                                                                Workflow:
-
-                                                                It uses the arxiv.Search class to search for the paper using the provided ID.
-                                                                It retrieves the first (and should be the only) result from the search.
-                                                                It creates a directory named "downloaded_papers" if it doesn't already exist.
-                                                                It then downloads the PDF of the paper, saving it in the "data" directory with the paper's title as the filename.
-
-
-                                                                Error Handling:
-
-                                                                The function is wrapped in a try-except block to catch and handle any exceptions that may occur during the download process.
-                                                                If an error occurs, it prints an error message including the paper ID and the specific error encountered.
-
-
-                                                                Output:
-
-                                                                On successful download, it prints a success message with the paper ID.
-                                                                On failure, it prints an error message detailing the issue.
-
-
-                                                                Note:
-
-                                                                The function doesn't return any value (returns None).
-                                                                It assumes the existence of an 'arxiv' module and appropriate permissions to create directories and write files.
-
-
-
-                                                                This function is useful in automating the process of downloading academic papers from arXiv, which can be particularly helpful in research tasks, literature reviews, or building a corpus of academic papers for further analysis.
-                                                                """
-                                                 )
-
-
-search_paper_tool = FunctionTool.from_defaults(fn=search_paper,
-                                               description="""The search_paper function is designed to search for academic papers on the arXiv repository based on a query string. Here's a detailed description of its functionality:
-
-                                                                Purpose: This function searches for papers on arXiv using a query string and returns a list of titles and IDs of the matching papers.
-                                                                Parameters:
-
-                                                                query (str): The search query string. string must translate to English first
-
-
-                                                                Workflow:
-
-                                                                It uses the arxiv.Search class to search for papers using the provided query string.string must translate to English first
-                                                                It iterates through the search results and collects the titles and IDs of the matching papers.
-                                                                It returns a formatted string containing the titles and IDs of the matching papers.
-
-
-                                                                Error Handling:
-
-                                                                The function is wrapped in a try-except block to catch and handle any exceptions that may occur during the search process.
-                                                                If an error occurs, it returns an error message including the query string and the specific error encountered.
-
-
-                                                                Output:
-
-                                                                On successful search, it returns a formatted string containing the titles and IDs of the matching papers.
-                                                                On failure, it returns an error message detailing the issue.
-
-
-                                                                Note:
-
-                                                                The function assumes the existence of an 'arxiv' module and appropriate permissions to access the internet.
-
-
-                                                                This function is useful in automating the process of searching for academic papers on arXiv, which can be particularly helpful in research tasks, literature reviews, or building a corpus of academic papers for further analysis.
-                                                                """
-                                                    )
-
-read_paper_tool = FunctionTool.from_defaults(fn=read_paper,
-                                             description="""This function retrieves information about an academic paper from the arXiv database using its unique identifier (paper_id).paper_id only contain number and version. It returns a list containing the following details about the paper:
-
-                                                            Authors
-                                                            Title
-                                                            Summary (abstract)
-                                                            Publication date
-                                                            Last update date
-
-                                                            The function uses the arxiv library to search for and fetch the paper details. If successful, it extracts the relevant information and returns it as a list. In case of any errors (e.g., invalid paper ID, network issues), it returns an error message string instead.
-                                                            Use this function when you need to access basic metadata about a specific arXiv paper. Provide the paper's arXiv ID as input."""
+retriever = QueryFusionRetriever(
+    [vector_retriever_chunk, bm25_retriever],
+    similarity_top_k=2,
+    num_queries=4,  # set this to 1 to disable query generation
+    mode="reciprocal_rerank",
+    use_async=True,
+    verbose=True,
+    # query_gen_prompt="...",  # we could override the query generation prompt here
 )
 
-from llama_index.core.tools import QueryEngineTool, ToolMetadata
-from llama_index.core import load_index_from_storage, StorageContext
-from llama_index.core.node_parser import SentenceSplitter
+# build RetrieverQueryEngine using recursive_retriever
+query_engine_chunk = RetrieverQueryEngine.from_args(
+    retriever
+)
+query_engine_chunk2 = RetrieverQueryEngine.from_args(
+    vector_retriever_chunk
+)
+# perform inference with advanced RAG (i.e. query engine)
+response = query_engine_chunk.query(
+    "Tell me about ColPali and LoRa. And tell me about their differences.Answer me use traditional chinese ."
+)
 
 
 
-def create_b_agent():
-    all_tools = []
-    paper_titles = os.listdir('./storage')
-    paper_titles = [title.split('.pdf')[0] for title in paper_titles if title.endswith('.pdf')]
-    for paper_title in paper_titles:
-        vector_index = load_index_from_storage(
-            StorageContext.from_defaults(persist_dir=f"./storage/{paper_title}"),
-        )
-        vector_query_engine = vector_index.as_query_engine(llm=Settings.llm)
-        all_tools.append(QueryEngineTool(
-            query_engine=vector_query_engine,
-            metadata=ToolMetadata(
-                name="vector_tool",
-                description = (
-        f"Useful for answering questions about the academic paper titled '{paper_title}'. "
-        "This tool can provide information on various aspects of the paper, including but not limited to:"
-        "\n- The main research question or hypothesis"
-        "\n- Methodology and experimental design"
-        "\n- Key findings and results"
-        "\n- Theoretical framework and background"
-        "\n- Implications and conclusions"
-        "\n- Related work and literature review"
-        "\n- Limitations and future research directions"
-        "\nUse a specific question about the paper as input to this tool."
-                ),
-            ),
-        ),)
-    b_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=10)
-    QueryEngineTool()
-    return b_agent
 
-def create_a_agent():
-    all_tools = []
-    all_tools.append(download_paper_tool)
-    all_tools.append(search_paper_tool)
-    all_tools.append(read_paper_tool)
-    a_agent = ReActAgent.from_tools(all_tools, llm=llm, verbose=True, max_iterations=10, metadata=ToolMetadata(name="", description=""))
-    return a_agent
+response2 = query_engine_chunk.query(
+    "Tell me about ColPali and LoRa. And tell me about their differences.Answer me use traditional chinese ."
+)
 
+print(response)
 
-a_agent = None # 這個是主要的腦
-b_agent = None # 這個是找資料的進大腦的
-c_agent = None # 這個是主持人
-a_agent = create_a_agent()
-b_agent = create_b_agent()
-
-c_agent = ReActAgent.from_tools([a_agent, b_agent], llm=llm, verbose=True, max_iterations=10, system_prompt="You are the host. You are responsible for managing the conversation between the user and the agents.")
-CHAT_HISTORY = []
-while True:
-    text_input = input("User: ")
-    if text_input == "exit":
-        break
-    response = c_agent.chat(text_input)
-    print(f"Agent: {response}")
-    b_agent = create_b_agent()
-    chat = f"'user':{text_input}, 'agent':{response}"
-    CHAT_HISTORY.append(chat)
-    c_agent = ReActAgent.from_tools([a_agent, b_agent] ,llm=llm, verbose=True, max_iterations=10, system_prompt=f"You are the host. Here are chat history {CHAT_HISTORY}. You are responsible for managing the conversation between the user and the agents. not every task will use agent a or agent b, it will depend on the task.Maybe you can ask llm to help you with the task without using agent.")
+print('---------------------------------')
+print(response2)
 
 
 
-# What was Lyft's revenue growth in 2021?
-# What was Uber's revenue growth in 2021?
-# Base on above chat_history. Compare the revenue growth of Uber and Lyft in 2021.
+"""

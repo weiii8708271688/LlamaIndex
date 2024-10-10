@@ -1,4 +1,5 @@
 # flake8: noqa: E402
+import os
 from dotenv import load_dotenv
 
 from app.config import DATA_DIR
@@ -6,7 +7,6 @@ from app.config import DATA_DIR
 load_dotenv()
 
 import logging
-import os
 
 import uvicorn
 from app.api.routers.chat import chat_router
@@ -23,6 +23,7 @@ app = FastAPI()
 
 init_settings()
 init_observability()
+
 
 environment = os.getenv("ENVIRONMENT", "dev")  # Default to 'development' if not set
 logger = logging.getLogger("uvicorn")
@@ -61,6 +62,7 @@ mount_static_files("output", "/api/files/output")
 app.include_router(chat_router, prefix="/api/chat")
 app.include_router(config_router, prefix="/api/chat/config")
 app.include_router(file_upload_router, prefix="/api/chat/upload")
+
 
 if __name__ == "__main__":
     app_host = os.getenv("APP_HOST", "0.0.0.0")

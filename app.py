@@ -8,6 +8,8 @@ from fastapi.responses import StreamingResponse
 import asyncio
 import json
 from typing import List, Dict, Any
+import re
+from file_service import PrivateFileService
 app = FastAPI()
 
 # 配置CORS
@@ -36,14 +38,16 @@ class VercelCompatibleResponse:
 async def stream_response(response: str):
     yield VercelCompatibleResponse.convert_text("")  # 開始流
     
-    for chunk in response.split():  # 簡單按單詞分割，您可能需要更複雜的邏輯
+    # 使用正則表達式按句子或短語分割，保留標點符號
+    chunks = re.findall(r'\S+\s*', response)
+    for chunk in chunks:
         yield VercelCompatibleResponse.convert_text(chunk)
-        await asyncio.sleep(0.1)  # 模擬延遲
-    
+        await asyncio.sleep(0.1)  # 稍微減少延遲以加快響應
+    """
     # 模擬事件輸出
     event_data = {
         "type": "agent",
-        "data": {"agent": "論文小幫手", "text": "Processing complete"}
+        "data": {"": "AIResearchAssistant", "text": "Processing complete"}
     }
     yield VercelCompatibleResponse.convert_data(event_data)
     
@@ -53,7 +57,7 @@ async def stream_response(response: str):
         "type": "suggested_questions",
         "data": suggested_questions
     }
-    yield VercelCompatibleResponse.convert_data(question_data)
+    yield VercelCompatibleResponse.convert_data(question_data)"""
 
 # 初始化您的 AI 助手
 assistant = AIResearchAssistant()
@@ -72,15 +76,26 @@ async def chat(request: Request, data: ChatData):
         last_message = data.messages[-1].content
         
         # 使用您的 AI 助手處理消息
-        response = assistant.chat(last_message)
-        print('-------------------')
-        print(response)
-        print('-------------------')
+        response = await assistant.chat(last_message)
+        print(f'AI response: {response}')
         # 返回響應
         return StreamingResponse(stream_response(response), media_type="text/event-stream")
-        return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class FileUploadRequest(BaseModel):
+    base64: str
+    filename: str
+
+@app.post("/api/chat/upload")
+async def upload_file(request: FileUploadRequest) -> Dict[str, Any]:
+    try:
+        result = PrivateFileService.process_file(request.filename, request.base64)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
 
 if __name__ == "__main__":
     import uvicorn

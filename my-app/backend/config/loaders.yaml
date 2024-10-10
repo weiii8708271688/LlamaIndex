@@ -1,1 +1,9 @@
 file: {}
+web:
+  driver_arguments:
+    - --no-sandbox
+    - --disable-dev-shm-usage
+  urls:
+    - base_url: https://www.llamaindex.ai
+      prefix: https://www.llamaindex.ai
+      depth: 1

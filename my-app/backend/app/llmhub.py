@@ -2,8 +2,6 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.settings import Settings
 from typing import Dict
 import os
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.ollama import Ollama
 
 DEFAULT_MODEL = "gpt-3.5-turbo"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-large"
@@ -57,6 +55,10 @@ def init_llmhub():
     llm_configs = llm_config_from_env()
     embedding_configs = embedding_config_from_env()
 
-    #Settings.embed_model = TSIEmbedding(**embedding_configs)
-    Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-    Settings.llm = Ollama(model="llama3:latest", request_timeout=120.0)
+    Settings.embed_model = TSIEmbedding(**embedding_configs)
+    Settings.llm = OpenAILike(
+        **llm_configs,
+        is_chat_model=True,
+        is_function_calling_model=False,
+        context_window=4096,
+    )

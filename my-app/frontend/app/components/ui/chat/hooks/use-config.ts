@@ -1,11 +1,15 @@
 "use client";
 
+import { CollapsibleContent } from "@radix-ui/react-collapsible";
+
 export interface ChatConfig {
   backend?: string;
 }
 
 function getBackendOrigin(): string {
   const chatAPI = process.env.NEXT_PUBLIC_CHAT_API;
+  console.log("chatAPI", chatAPI);
+  
   if (chatAPI) {
     return new URL(chatAPI).origin;
   } else {
@@ -18,6 +22,7 @@ function getBackendOrigin(): string {
 }
 
 export function useClientConfig(): ChatConfig {
+  
   return {
     backend: getBackendOrigin(),
   };

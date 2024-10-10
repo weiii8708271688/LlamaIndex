@@ -6,7 +6,6 @@ from llama_index.core.settings import Settings
 
 def init_settings():
     model_provider = os.getenv("MODEL_PROVIDER")
-    model_provider = 'ollama'
     match model_provider:
         case "openai":
             init_openai()
@@ -34,19 +33,22 @@ def init_settings():
 
 
 def init_ollama():
-    
-    from llama_index.llms.ollama.base import DEFAULT_REQUEST_TIMEOUT
-    from llama_index.llms.ollama import Ollama
-    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+    from llama_index.embeddings.ollama import OllamaEmbedding
+    from llama_index.llms.ollama.base import DEFAULT_REQUEST_TIMEOUT, Ollama
 
     base_url = os.getenv("OLLAMA_BASE_URL") or "http://127.0.0.1:11434"
     request_timeout = float(
         os.getenv("OLLAMA_REQUEST_TIMEOUT", DEFAULT_REQUEST_TIMEOUT)
     )
-    Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-    Settings.llm = Ollama(model="llama3.1:latest", request_timeout=120.0)
+    Settings.embed_model = OllamaEmbedding(
+        base_url=base_url,
+        model_name=os.getenv("EMBEDDING_MODEL"),
+    )
+    Settings.llm = Ollama(
+        base_url=base_url, model=os.getenv("MODEL"), request_timeout=request_timeout
+    )
 
-"""
+
 def init_openai():
     from llama_index.core.constants import DEFAULT_TEMPERATURE
     from llama_index.embeddings.openai import OpenAIEmbedding
@@ -103,7 +105,9 @@ def init_azure_openai():
 
 
 def init_fastembed():
-
+    """
+    Use Qdrant Fastembed as the local embedding provider.
+    """
     from llama_index.embeddings.fastembed import FastEmbedEmbedding
 
     embed_model_map: Dict[str, str] = {
@@ -160,5 +164,3 @@ def init_mistral():
 
     Settings.llm = MistralAI(model=os.getenv("MODEL"))
     Settings.embed_model = MistralAIEmbedding(model_name=os.getenv("EMBEDDING_MODEL"))
-
-"""
