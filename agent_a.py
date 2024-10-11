@@ -8,6 +8,12 @@ import asyncio
 import threading
 import time
 from pathlib import Path
+from llama_index.core import load_index_from_storage, StorageContext
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.chat_engine import SimpleChatEngine
+import os
+from llama_index.llms.ollama import Ollama
+import prompt.agent_a_prompt as agent_a_prompt
 
 class AgentA:
     def __init__(self, llm,):
@@ -21,50 +27,24 @@ class AgentA:
             description="Searches for academic papers on arXiv based on a query string."
         )
 
+        self.generate_paper_search_prompt_tool = FunctionTool.from_defaults(
+            fn=self.generate_paper_search_prompt,
+            description="Query the paper database to check for paper existence and get file names. Always use this first. "
+        )
+
     def create_agent(self):
-        system_prompt = """
-            You are an advanced AI agent specialized in academic paper retrieval and information gathering from the arXiv repository. Your primary functions are:
-
-            1. Searching for academic papers based on user queries.
-            2. Downloading and indexing papers from arXiv using their unique identifiers.
-
-            Key Capabilities:
-            1. Paper Search:
-            - Use the 'search_paper' tool to find relevant papers on arXiv.
-            - Return up to 5 most relevant results, including titles and arXiv IDs.
-            - If no papers are found, suggest refining the search query.
-
-            2. Paper Download:
-            - Use the 'download_paper' tool to retrieve and index papers by their arXiv ID.
-            - Ensure the paper is not already in the database before initiating a download.
-            - Handle potential errors during download or processing gracefully.
-
-            Operational Guidelines:
-            - Always start with a search if the user doesn't provide a specific arXiv ID.
-            - When downloading, confirm the success of both the download and indexing process.
-            - If a paper is already in the database, inform the user and offer to provide information about it.
-            - Be mindful of potential API rate limits and inform the user if multiple requests are needed.
-            - Provide clear, concise responses about the status of each operation (search or download).
-
-            Interaction Style:
-            - Maintain a professional and academic tone.
-            - Be proactive in suggesting related papers or additional searches when appropriate.
-            - If a user's query is ambiguous, ask for clarification before proceeding.
-            - Offer brief explanations of your actions to keep the user informed of the process.
-
-            Remember: Your goal is to efficiently assist users in finding and accessing relevant academic papers from arXiv, enhancing their research capabilities.
-            """
+        
         a_agent = ReActAgent.from_tools(
-            [self.download_paper_tool, self.search_paper_tool], 
+            [self.download_paper_tool, self.search_paper_tool, self.generate_paper_search_prompt_tool], 
             llm=self.llm, 
             verbose=True, 
             max_iterations=10, 
-            system_prompt=system_prompt
+            system_prompt=agent_a_prompt.SYSTEM_PROMPT
         )
         return QueryEngineTool(
             query_engine=a_agent, 
             metadata=ToolMetadata(
-                name="Search_Agent_Tool",
+                name="AgentA",
                 description="A comprehensive tool for academic research assistance, specializing in arXiv repository interactions. There are two main tools to use: 1. download_paper: Download and index academic papers from arXiv based on their IDs. 2. search_paper: Search 5 papers for academic papers on arXiv based on a query string."
             )
         )
@@ -92,7 +72,7 @@ class AgentA:
             # 構建檔案路徑，確保文件名合法
             
             safe_title = "".join(c for c in title if c.isalnum() or c in [' ', '-', '_']).rstrip()
-            filename = f"{safe_title}.pdf"
+            filename = f"{safe_title}_{paper_id}.pdf"
             pdf_path = Path(f"data/pdf/{filename}")
             if pdf_path.exists():
                 print(f"Paper '{safe_title}' [{paper_id}] already exists.")
@@ -140,7 +120,7 @@ class AgentA:
         
     def search_paper(self, query: str) -> str:
         try:
-            search = arxiv.Search(query=query, max_results=10)
+            search = arxiv.Search(query=query, max_results=3)
             results = [f"Title: {result.title}, ID: {result.entry_id.split('/')[-1]}" for result in search.results()]
             return "\n".join(results) if results else "No papers found."
         except Exception as e:
@@ -193,3 +173,20 @@ class AgentA:
             all_nodes
         )
         vector_index_chunk.storage_context.persist(persist_dir=f"./storage/{filename[:-4]}")
+
+
+
+    def generate_paper_search_prompt(self, user_input: str):
+        self.title_list = os.listdir("data/pdf")
+        chat_engine = SimpleChatEngine.from_defaults(llm=Ollama(model="llama3.1:latest", request_timeout=120.0))
+        response = chat_engine.chat(f"The database contains the following paper files:\n{self.title_list}\n"
+            f"The paper the user wants to find is: {user_input}\n"
+            "If this paper doesn't exist, output only 'NO' without any other sentences.\n"
+            "If the paper exists, output the complete file name(s) of the paper(s), "
+            "without any path. If there are multiple files with the same name, "
+            "output all matching complete file names.")
+        
+        if response.response != "NO":
+            return f"Paper found: {response.response}. Proceed to ask questions about this paper."
+        else:
+            return "NO"
