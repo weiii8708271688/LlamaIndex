@@ -27,11 +27,29 @@ class AgentB:
             [self.ask_about_papers_tool],
             llm=self.llm,
             verbose=True,
-            max_iterations=30,
-            system_prompt=agent_b_prompt.FULL_PROMPT
+            max_iterations=10,
+            context=agent_b_prompt.FULL_PROMPT
         )
+        agent_b = FunctionTool.from_defaults(
+            fn=b_agent.chat,
+            name="PaperQueryAssistant_AgentB",
+            description="An advanced tool for querying and analyzing scientific paper information.",
+            tool_metadata=ToolMetadata(
+                name="PaperQueryAssistant_AgentB",
+                description="""
+                    This tool helps you retrieve detailed information about scientific papers. Usage:
+                    1. Input your question or query in the format: {"message": "your question"}
+                    2. Questions can include paper summaries, research methods, result analysis, or comparisons of related works.
+                    3. The tool understands and responds to complex queries about research across various scientific domains.
+                    4. For more details, you can ask follow-up questions.
 
-        return QueryEngineTool(
+                    Always include the 'message' parameter when using this tool, for example:
+                    PaperQueryAssistant_AgentB({"message": "Tell me about the latest applications of AI in medical diagnostics"})
+                """
+            )
+        )
+        return agent_b
+        return FunctionTool(
             query_engine=b_agent,
             metadata=ToolMetadata(
                 name="Agent_B",
@@ -42,7 +60,7 @@ class AgentB:
     def ask_about_papers(self, paper_name: str, question: str) -> str:
         filepath = f"./storage/{paper_name}"
         if not os.path.exists(filepath):
-            return f"NO PAPER {paper_name} FOUND, Here are list of papers {os.listdir('./storage')}"
+            return f"NO PAPER {paper_name} FOUND, Here are list of papers {os.listdir('./storage')}. You may find the paper you are looking for in the list above."
         self.vector_index_chunk = load_index_from_storage(
             StorageContext.from_defaults(persist_dir=filepath),
         )

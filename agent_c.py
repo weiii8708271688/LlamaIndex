@@ -16,8 +16,8 @@ class AgentC:
             [self.agent_a, self.agent_b],
             llm=self.llm,
             verbose=True,
-            max_iterations=30,
-            system_prompt=agent_c_prompt.FULL_PROMPT
+            max_iterations=10,
+            context=agent_c_prompt.FULL_PROMPT
         )
         
         return c_agent

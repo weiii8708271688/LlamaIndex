@@ -39,15 +39,28 @@ class AgentA:
             llm=self.llm, 
             verbose=True, 
             max_iterations=10, 
-            system_prompt=agent_a_prompt.SYSTEM_PROMPT
+            context=agent_a_prompt.SYSTEM_PROMPT
         )
-        return QueryEngineTool(
-            query_engine=a_agent, 
-            metadata=ToolMetadata(
-                name="AgentA",
-                description="A comprehensive tool for academic research assistance, specializing in arXiv repository interactions. There are two main tools to use: 1. download_paper: Download and index academic papers from arXiv based on their IDs. 2. search_paper: Search 5 papers for academic papers on arXiv based on a query string."
-            )
-        )
+        a_agent = FunctionTool.from_defaults(
+                fn=a_agent.chat,
+                name="PaperDownloadAssistant_AgentA",
+                description="""An advanced tool for searching, downloading, and managing academic papers from arXiv. Capabilities include:
+                    1. Paper Search: Find relevant academic papers on arXiv using keyword queries.
+                    2. Paper Download: Retrieve and store papers locally given their arXiv ID.
+                    3. Paper Indexing: Automatically index downloaded papers for efficient querying.
+                    4. Database Management: Maintain a local database of downloaded papers.
+                    5. Query Generation: Create optimized search queries for the paper database.
+
+                    Use this tool for all arXiv-related tasks, including literature reviews, paper acquisition, and research assistance. 
+
+                    Always include the 'message' parameter when using this tool, for example:
+                    PaperDownloadAssistant_AgentA({"message": "Search for papers on quantum computing"})
+
+                    Ensure each request is formatted correctly to get the best results.
+                    """
+                )
+        return a_agent
+        
     
     def download_paper(self, paper_id: str) -> str:
         try:
