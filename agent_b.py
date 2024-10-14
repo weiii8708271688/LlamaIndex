@@ -11,6 +11,8 @@ import os
 from llama_index.llms.ollama import Ollama
 import prompt.agent_b_prompt as agent_b_prompt
 
+
+
 class AgentB:
     def __init__(self, llm):
         self.llm = llm
@@ -77,7 +79,7 @@ class AgentB:
             similarity_top_k=5,
             num_queries=4,
             mode="reciprocal_rerank",
-            use_async=True,
+            use_async=False,
             verbose=True,
         )
 

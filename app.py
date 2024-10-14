@@ -12,6 +12,9 @@ import re
 from file_service import PrivateFileService
 app = FastAPI()
 
+import nest_asyncio
+nest_asyncio.apply()
+
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
@@ -70,13 +73,13 @@ class ChatData(BaseModel):
     messages: List[Message]
 
 @app.post("/api/chat")
-async def chat(request: Request, data: ChatData):
+def chat(request: Request, data: ChatData):
     try:
         # 獲取最後一條消息
         last_message = data.messages[-1].content
         
         # 使用您的 AI 助手處理消息
-        response = await assistant.chat(last_message)
+        response = assistant.chat(last_message)
         print(f'AI response: {response}')
         # 返回響應
         return StreamingResponse(stream_response(response), media_type="text/event-stream")

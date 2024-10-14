@@ -14,6 +14,12 @@ from llama_index.core.chat_engine import SimpleChatEngine
 import os
 from llama_index.llms.ollama import Ollama
 import prompt.agent_a_prompt as agent_a_prompt
+from llama_index.core import load_index_from_storage, StorageContext
+from llama_index.core import VectorStoreIndex
+from llama_index.core import SimpleDirectoryReader
+from llama_index.core.schema import IndexNode
+import asyncio, nest_asyncio
+nest_asyncio.apply()
 
 class AgentA:
     def __init__(self, llm,):
@@ -44,20 +50,7 @@ class AgentA:
         a_agent = FunctionTool.from_defaults(
                 fn=a_agent.chat,
                 name="PaperDownloadAssistant_AgentA",
-                description="""An advanced tool for searching, downloading, and managing academic papers from arXiv. Capabilities include:
-                    1. Paper Search: Find relevant academic papers on arXiv using keyword queries.
-                    2. Paper Download: Retrieve and store papers locally given their arXiv ID.
-                    3. Paper Indexing: Automatically index downloaded papers for efficient querying.
-                    4. Database Management: Maintain a local database of downloaded papers.
-                    5. Query Generation: Create optimized search queries for the paper database.
-
-                    Use this tool for all arXiv-related tasks, including literature reviews, paper acquisition, and research assistance. 
-
-                    Always include the 'message' parameter when using this tool, for example:
-                    PaperDownloadAssistant_AgentA({"message": "Search for papers on quantum computing"})
-
-                    Ensure each request is formatted correctly to get the best results.
-                    """
+                description="""Advanced tool for arXiv paper search, download, and management. Has 'meaaage' one parameter."""
                 )
         return a_agent
         
@@ -91,7 +84,6 @@ class AgentA:
                 print(f"Paper '{safe_title}' [{paper_id}] already exists.")
                 return f"Paper '{safe_title}' [{paper_id}] already downloaded before."
             
-            return "Paper download not implemented yet."
             # 下載 PDF 文件
             print(f"Downloading PDF for paper {paper_id}")
             pdf_response = requests.get(pdf_url)
@@ -101,7 +93,7 @@ class AgentA:
             
             # 解析 PDF 文件
             print(f"Parsing PDF for paper {paper_id}")
-            self.run_async_parse(pdf_path)
+            self.load(filename)
             
             # 加載或創建索引
             print(f"Loading or creating index for paper {paper_id}")
@@ -139,30 +131,16 @@ class AgentA:
         except Exception as e:
             return f"Error searching for papers with query '{query}': {str(e)}"
         
-
-    def run_async_parse(self, pdf_path):
-        async def async_parse():
-            global paper_docs
-            paper_docs = await self.parser.aload_data(str(pdf_path))
-
-        def run_in_thread(loop):
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(async_parse())
-
-        loop = asyncio.new_event_loop()
-        thread = threading.Thread(target=run_in_thread, args=(loop,))
-        thread.start()
-        thread.join()
-        return None
     
     def load(self, filename):
-        documents = SimpleDirectoryReader(
+        global paper_docs
+        paper_docs = SimpleDirectoryReader(
         input_files=[f"data/pdf/{filename}"]
         ).load_data()
 
         # build parent chunks via NodeParser
         node_parser = SentenceSplitter(chunk_size=1024)
-        base_nodes = node_parser.get_nodes_from_documents(documents)
+        base_nodes = node_parser.get_nodes_from_documents(paper_docs)
 
         # define smaller child chunks
         sub_chunk_sizes = [256, 512]

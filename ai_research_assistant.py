@@ -35,7 +35,8 @@ class AIResearchAssistant:
     def __init__(self):
         nest_asyncio.apply()
         load_dotenv()
-        op = input("要開啟OPENAI LLM嗎？(y/n)")
+        # op = input("要開啟OPENAI LLM嗎？(y/n)")
+        op = 'y'
         if op == 'y':
             self.llm = OpenAI(temperature=0, model="gpt-3.5-turbo", api_key=os.getenv('OPENAI_API_KEY'))
         else:
@@ -58,10 +59,11 @@ class AIResearchAssistant:
         self.agent_c = AgentC(self.llm, self.agent_a, self.agent_b).create_agent()
 
 
-    async def chat(self, user_input: str) -> str:
+    def chat(self, user_input: str) -> str:
         print(f"收到了 User說 {user_input}")
         
         response = self.agent_c.chat(user_input)
+        print(f"回覆了 {response.response}")
         self.chat_history.append(f"User: {user_input}")
         self.chat_history.append(f"Agent: {response.response}")
         return response.response

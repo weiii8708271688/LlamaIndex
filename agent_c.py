@@ -4,6 +4,8 @@ from llama_index.core.chat_engine import SimpleChatEngine
 from llama_index.core.tools import FunctionTool, ToolMetadata
 import prompt.agent_c_prompt as agent_c_prompt
 
+import asyncio, nest_asyncio
+nest_asyncio.apply()
 class AgentC:
     def __init__(self, llm, agent_a, agent_b):
         self.llm = llm
