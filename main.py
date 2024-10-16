@@ -11,7 +11,7 @@ async def main():
         user_input = input("You: ")
         if user_input.lower() == 'quit':
             break
-        response = await assistant.chat(user_input)
+        response = assistant.chat(user_input)
         print(response)
 
 if __name__ == "__main__":

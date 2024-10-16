@@ -30,8 +30,10 @@ class AgentB:
             llm=self.llm,
             verbose=True,
             max_iterations=10,
-            context=agent_b_prompt.FULL_PROMPT
+            
         )
+        b_agent.update_prompts({"agent_worker:system_prompt": agent_b_prompt.FULL_PROMPT})
+        # b_agent.reset()
         agent_b = FunctionTool.from_defaults(
             fn=b_agent.chat,
             name="PaperQueryAssistant_AgentB",
@@ -76,7 +78,7 @@ class AgentB:
         # 創建融合檢索器
         self.retriever = QueryFusionRetriever(
             [self.vector_retriever_chunk, self.bm25_retriever],
-            similarity_top_k=5,
+            similarity_top_k=3,
             num_queries=4,
             mode="reciprocal_rerank",
             use_async=False,

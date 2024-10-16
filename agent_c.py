@@ -19,8 +19,9 @@ class AgentC:
             llm=self.llm,
             verbose=True,
             max_iterations=10,
-            context=agent_c_prompt.FULL_PROMPT
+            
         )
+        c_agent.update_prompts({"agent_worker:system_prompt": agent_c_prompt.FULL_PROMPT})
         
         return c_agent
     

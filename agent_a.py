@@ -45,8 +45,9 @@ class AgentA:
             llm=self.llm, 
             verbose=True, 
             max_iterations=10, 
-            context=agent_a_prompt.SYSTEM_PROMPT
+            
         )
+        a_agent.update_prompts({"agent_worker:system_prompt": agent_a_prompt.FULL_PROMPT})
         a_agent = FunctionTool.from_defaults(
                 fn=a_agent.chat,
                 name="PaperDownloadAssistant_AgentA",
