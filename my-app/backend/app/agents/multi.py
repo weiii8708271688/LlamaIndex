@@ -1,14 +1,16 @@
+import asyncio
 from typing import Any, List
 
-from app.agents.planner import StructuredPlannerAgent
+from llama_index.core.tools.types import ToolMetadata, ToolOutput
+from llama_index.core.tools.utils import create_schema_from_function
+from llama_index.core.workflow import Context, Workflow
+
 from app.agents.single import (
     AgentRunResult,
     ContextAwareTool,
     FunctionCallingAgent,
 )
-from llama_index.core.tools.types import ToolMetadata, ToolOutput
-from llama_index.core.tools.utils import create_schema_from_function
-from llama_index.core.workflow import Context, Workflow
+from app.agents.planner import StructuredPlannerAgent
 
 
 class AgentCallTool(ContextAwareTool):
@@ -32,11 +34,11 @@ class AgentCallTool(ContextAwareTool):
 
     # overload the acall function with the ctx argument as it's needed for bubbling the events
     async def acall(self, ctx: Context, input: str) -> ToolOutput:
-        handler = self.agent.run(input=input)
+        task = asyncio.create_task(self.agent.run(input=input))
         # bubble all events while running the agent to the calling agent
-        async for ev in handler.stream_events():
+        async for ev in self.agent.stream_events():
             ctx.write_event_to_stream(ev)
-        ret: AgentRunResult = await handler
+        ret: AgentRunResult = await task
         response = ret.response.message.content
         return ToolOutput(
             content=str(response),

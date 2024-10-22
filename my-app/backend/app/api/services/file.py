@@ -13,7 +13,7 @@ from llama_index.core.readers.file.base import (
 )
 from llama_index.core.schema import Document
 from llama_index.indices.managed.llama_cloud.base import LlamaCloudIndex
-from llama_index.readers.file import FlatReader
+from llama_index.readers.file.flat import FlatReader
 
 
 def get_llamaparse_parser():
@@ -86,7 +86,8 @@ class PrivateFileService:
 
         # Insert the documents into the index
         if isinstance(current_index, LlamaCloudIndex):
-            from app.engine.service import LLamaCloudFileService
+            from app.engine.services.llama_cloud_file import LLamaCloudFileService
+            # y6gt]import78 LLamaCloudFileService
 
             project_id = current_index._get_project_id()
             pipeline_id = current_index._get_pipeline_id()

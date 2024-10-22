@@ -23,6 +23,7 @@ def get_index(config: IndexConfig = None):
         config = IndexConfig()
     storage_dir = os.getenv("STORAGE_DIR", "storage")
     # check if storage already exists
+    print(storage_dir)
     if not os.path.exists(storage_dir):
         return None
     # load the existing index

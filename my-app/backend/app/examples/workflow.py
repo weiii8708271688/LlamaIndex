@@ -1,8 +1,7 @@
+import asyncio
 from typing import AsyncGenerator, List, Optional
 
-from app.agents.single import AgentRunEvent, AgentRunResult, FunctionCallingAgent
-from app.examples.researcher import create_researcher
-from llama_index.core.chat_engine.types import ChatMessage
+
 from llama_index.core.workflow import (
     Context,
     Event,
@@ -11,6 +10,9 @@ from llama_index.core.workflow import (
     Workflow,
     step,
 )
+from llama_index.core.chat_engine.types import ChatMessage
+from app.agents.single import AgentRunEvent, AgentRunResult, FunctionCallingAgent
+from app.examples.researcher import create_researcher
 
 
 def create_workflow(chat_history: Optional[List[ChatMessage]] = None):
@@ -29,7 +31,7 @@ def create_workflow(chat_history: Optional[List[ChatMessage]] = None):
         system_prompt="You are an expert in reviewing blog posts. You are given a task to review a blog post. Review the post for logical inconsistencies, ask critical questions, and provide suggestions for improvement. Furthermore, proofread the post for grammar and spelling errors. Only if the post is good enough for publishing, then you MUST return 'The post is good.'. In all other cases return your review.",
         chat_history=chat_history,
     )
-    workflow = BlogPostWorkflow(timeout=360)
+    workflow = BlogPostWorkflow(timeout=99999)
     workflow.add_workflows(researcher=researcher, writer=writer, reviewer=reviewer)
     return workflow
 
@@ -130,10 +132,8 @@ Review:
         input: str,
         streaming: bool = False,
     ) -> AgentRunResult | AsyncGenerator:
-        handler = agent.run(input=input, streaming=streaming)
+        task = asyncio.create_task(agent.run(input=input, streaming=streaming))
         # bubble all events while running the executor to the planner
-        async for event in handler.stream_events():
-            # Don't write the StopEvent from sub task to the stream
-            if type(event) is not StopEvent:
-                ctx.write_event_to_stream(event)
-        return await handler
+        async for event in agent.stream_events():
+            ctx.write_event_to_stream(event)
+        return await task
