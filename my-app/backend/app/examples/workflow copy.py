@@ -13,7 +13,7 @@ from llama_index.core.workflow import (
 from llama_index.core.chat_engine.types import ChatMessage
 from app.agents.single import AgentRunEvent, AgentRunResult, FunctionCallingAgent
 from app.examples.researcher import create_researcher
-
+from llama_index.core.tools import FunctionTool
 
 def create_workflow(chat_history: Optional[List[ChatMessage]] = None):
     researcher = create_researcher(
@@ -22,29 +22,18 @@ def create_workflow(chat_history: Optional[List[ChatMessage]] = None):
     writer = FunctionCallingAgent(
         name="writer",
         role="expert in writing blog posts",
-        system_prompt="""
-        You are an expert in writing blog posts. 
-        You are given a task to write a blog post. Don't make up any information yourself.
-        """,
+        system_prompt="""You are an expert in writing blog posts. You are given a task to write a blog post. Don't make up any information yourself.""",
         chat_history=chat_history,
     )
     reviewer = FunctionCallingAgent(
         name="reviewer",
         role="expert in reviewing blog posts",
-        system_prompt="""
-        You are an expert in reviewing blog posts. 
-        You are given a task to review a blog post. 
-        Review the post for logical inconsistencies, ask critical questions, and provide suggestions for improvement. 
-        Furthermore, proofread the post for grammar and spelling errors. 
-        Only if the post is good enough for publishing, then you MUST return 'The post is good.'. 
-        In all other cases return your review.
-        """,
+        system_prompt="You are an expert in reviewing blog posts. You are given a task to review a blog post. Review the post for logical inconsistencies, ask critical questions, and provide suggestions for improvement. Furthermore, proofread the post for grammar and spelling errors. Only if the post is good enough for publishing, then you MUST return 'The post is good.'. In all other cases return your review.",
         chat_history=chat_history,
     )
-    workflow = BlogPostWorkflow(timeout=99999)
-    workflow.add_workflows(researcher=researcher, writer=writer, reviewer=reviewer)
-    return workflow
-
+    writer_tool = FunctionTool.from_defaults(fn=writer.run)
+    reviewer_tool = FunctionTool.from_defaults(fn=reviewer.run)
+    researcher  = FunctionCallingAgent(tools=[writer_tool, reviewer_tool])
 
 class ResearchEvent(Event):
     input: str
@@ -72,9 +61,7 @@ class BlogPostWorkflow(Workflow):
     async def research(
         self, ctx: Context, ev: ResearchEvent, researcher: FunctionCallingAgent
     ) -> WriteEvent:
-        
         result: AgentRunResult = await self.run_agent(ctx, researcher, ev.input)
-        
         content = result.response.message.content
         return WriteEvent(
             input=f"Write a blog post given this task: {ctx.data['task']} using this research content: {content}"
@@ -85,11 +72,6 @@ class BlogPostWorkflow(Workflow):
         self, ctx: Context, ev: WriteEvent, writer: FunctionCallingAgent
     ) -> ReviewEvent | StopEvent:
         MAX_ATTEMPTS = 2
-        chat_history = writer.memory.get()
-        print(f"============Agent writer chat_history Before:====================")
-        for chat in chat_history:
-            print(chat.model_dump_json(indent=4))
-        print(f"===============================================================")
         ctx.data["attempts"] = ctx.data.get("attempts", 0) + 1
         too_many_attempts = ctx.data["attempts"] > MAX_ATTEMPTS
         if too_many_attempts:
@@ -105,14 +87,8 @@ class BlogPostWorkflow(Workflow):
                 ctx, writer, ev.input, streaming=ctx.data["streaming"]
             )
             return StopEvent(result=result)
-        chat_history = writer.memory.get()
-        print(f"============Agent writer chat_history After:====================")
-        for chat in chat_history:
-            print(chat.model_dump_json(indent=4))
-        print(f"===============================================================")
         result: AgentRunResult = await self.run_agent(ctx, writer, ev.input)
         ctx.data["result"] = result
-        
         return ReviewEvent(input=result.response.message.content)
 
     @step()
@@ -126,28 +102,26 @@ class BlogPostWorkflow(Workflow):
         ctx.write_event_to_stream(
             AgentRunEvent(
                 name=reviewer.name,
-                msg=f"""The post is {'not ' if not post_is_good else ''}good enough for publishing. 
-                Sending back to the writer{' for publication.' if post_is_good else '.'}""",
+                msg=f"The post is {'not ' if not post_is_good else ''}good enough for publishing. Sending back to the writer{' for publication.' if post_is_good else '.'}",
             )
         )
         if post_is_good:
             return WriteEvent(
-                input=f"""You're blog post is ready for publication. 
-                Please respond with just the blog post. Blog post: ```{old_content}```""",
+                input=f"You're blog post is ready for publication. Please respond with just the blog post. Blog post: ```{old_content}```",
                 is_good=True,
             )
         else:
             return WriteEvent(
                 input=f"""Improve the writing of a given blog post by using a given review.
-                        Blog post:
-                        ```
-                        {old_content}
-                        ``` 
+Blog post:
+```
+{old_content}
+``` 
 
-                        Review: 
-                        ```
-                        {review}
-                        ```"""
+Review: 
+```
+{review}
+```"""
             )
 
     async def run_agent(
@@ -158,12 +132,7 @@ class BlogPostWorkflow(Workflow):
         streaming: bool = False,
     ) -> AgentRunResult | AsyncGenerator:
         task = asyncio.create_task(agent.run(input=input, streaming=streaming))
-        
         # bubble all events while running the executor to the planner
         async for event in agent.stream_events():
             ctx.write_event_to_stream(event)
-        
         return await task
-
-
-

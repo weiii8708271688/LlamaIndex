@@ -13,7 +13,7 @@ from app.agents.single import (
 from app.agents.planner import StructuredPlannerAgent
 
 
-class AgentCallTool(ContextAwareTool):
+class AgentCallTool(ContextAwareTool): #這個工具允許一個代理委派任務給另一個代理，實現了代理之間的協作。
     def __init__(self, agent: Workflow) -> None:
         self.agent = agent
         name = f"call_{agent.name}"
@@ -22,7 +22,9 @@ class AgentCallTool(ContextAwareTool):
             pass
 
         # create the schema without the Context
+        
         fn_schema = create_schema_from_function(name, schema_call)
+        print(f"fn_schema: {fn_schema}")
         self._metadata = ToolMetadata(
             name=name,
             description=(
@@ -40,15 +42,22 @@ class AgentCallTool(ContextAwareTool):
             ctx.write_event_to_stream(ev)
         ret: AgentRunResult = await task
         response = ret.response.message.content
+        try:
+            print(f"{self.agent.name} memory {self.agent.memory.model_dump_json(indent=4)}")
+        except Exception as e:
+            print(f"Error while getting memory: {e}")
+
+        print(f"{self.agent.name} have been called")
         return ToolOutput(
             content=str(response),
             tool_name=self.metadata.name,
             raw_input={"args": input, "kwargs": {}},
             raw_output=response,
         )
+        
 
 
-class AgentCallingAgent(FunctionCallingAgent):
+class AgentCallingAgent(FunctionCallingAgent):#這個類的目的是創建一個可以調用其他代理的代理。
     def __init__(
         self,
         *args: Any,
@@ -61,9 +70,10 @@ class AgentCallingAgent(FunctionCallingAgent):
         super().__init__(*args, name=name, tools=tools, **kwargs)
         # call add_workflows so agents will get detected by llama agents automatically
         self.add_workflows(**{agent.name: agent for agent in agents})
+        print("here is the AgentCallingAgent have been called")
 
 
-class AgentOrchestrator(StructuredPlannerAgent):
+class AgentOrchestrator(StructuredPlannerAgent): #這個類用於協調多個代理的工作。
     def __init__(
         self,
         *args: Any,

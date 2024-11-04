@@ -14,6 +14,7 @@ class WebLoaderConfig(BaseModel):
 
 def get_web_documents(config: WebLoaderConfig):
     from llama_index.readers.web import WholeSiteReader
+    
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service

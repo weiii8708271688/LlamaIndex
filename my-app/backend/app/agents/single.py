@@ -40,7 +40,6 @@ class AgentRunEvent(Event):
     def msg(self, value):
         self._msg = value
 
-
 class AgentRunResult(BaseModel):
     response: ChatResponse
     sources: list[ToolOutput]
@@ -79,7 +78,7 @@ class FunctionCallingAgent(Workflow):
         assert self.llm.metadata.is_function_calling_model
 
         self.system_prompt = system_prompt
-
+        
         self.memory = ChatMemoryBuffer.from_defaults(
             llm=self.llm, chat_history=chat_history
         )
@@ -88,8 +87,8 @@ class FunctionCallingAgent(Workflow):
     @step()
     async def prepare_chat_history(self, ctx: Context, ev: StartEvent) -> InputEvent:
         # clear sources
+        
         self.sources = []
-
         # set system prompt
         if self.system_prompt is not None:
             system_msg = ChatMessage(role="system", content=self.system_prompt)
@@ -109,6 +108,10 @@ class FunctionCallingAgent(Workflow):
 
         # get chat history
         chat_history = self.memory.get()
+        # print(f"============Agent {self.name} chat_history:====================")
+        # for chat in chat_history:
+        #     print(chat.model_dump_json(indent=4))
+        # print(f"===============================================================")
         return InputEvent(input=chat_history)
 
     @step()
@@ -123,7 +126,11 @@ class FunctionCallingAgent(Workflow):
         response = await self.llm.achat_with_tools(
             self.tools, chat_history=chat_history
         )
+        print('=====================')
+        print(f"Agent {self.name} response: {response} 幹你娘")
+        
         self.memory.put(response.message)
+        print('=====================')
 
         tool_calls = self.llm.get_tool_calls_from_response(
             response, error_on_no_tool_call=False
@@ -189,6 +196,8 @@ class FunctionCallingAgent(Workflow):
             ctx.write_event_to_stream(
                 AgentRunEvent(name=self.name, msg="Finished task")
             )
+        print(f"agent {self.name} 的 generator: {generator}")
+        print(f"agent {self.name} 的 chat_history: {self.memory.model_dump_json(indent=4)}")
         return StopEvent(result=generator)
 
     @step()
@@ -205,6 +214,7 @@ class FunctionCallingAgent(Workflow):
                 "tool_call_id": tool_call.tool_id,
                 "name": tool.metadata.get_name(),
             }
+            print(f"Agent {self.name} Calling Tool {tool_call.tool_name}")
             if not tool:
                 tool_msgs.append(
                     ChatMessage(

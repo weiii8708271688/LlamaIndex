@@ -79,7 +79,9 @@ class StructuredPlannerAgent(Workflow):
             tools=self.tools,
             write_events=False,
             # it's important to instruct to just return the tool call, otherwise the executor will interpret and change the result
-            system_prompt="You are an expert in completing given tasks by calling the right tool for the task. Just return the result of the tool call. Don't add any information yourself",
+            system_prompt="""You are an expert in completing given tasks by calling the right tool for the task. 
+            Just return the result of the tool call.
+            Don't add any information yourself""",
         )
         self.add_workflows(executor=self.executor)
 
@@ -100,6 +102,9 @@ class StructuredPlannerAgent(Workflow):
         )
         if self._verbose:
             print("=== Executing plan ===\n")
+            print(f"=== Plan ID: {plan_id} ===")
+            print(plan.model_dump_json(indent=4))
+            
         return ExecutePlanEvent()
 
     @step()
@@ -152,7 +157,9 @@ class StructuredPlannerAgent(Workflow):
 
         upcoming_sub_tasks = self.get_upcoming_sub_tasks(ctx)
         # if no more tasks to do, stop workflow and send result of last step
+        print(f"現在的最後 results: {results[-1].result}")
         if upcoming_sub_tasks == 0:
+
             return StopEvent(result=results[-1].result)
 
         if self.refine_plan:

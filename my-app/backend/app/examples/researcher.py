@@ -34,6 +34,9 @@ def create_researcher(chat_history: List[ChatMessage]):
         name="researcher",
         tools=[get_query_engine_tool()],
         role="expert in retrieving any unknown content",
-        system_prompt="You are a researcher agent. You are given a researching task. You must use your tools to complete the research.",
+        system_prompt="""
+            You are a researcher agent. You are given a researching task. 
+            You must use your tools to complete the research."
+        """,
         chat_history=chat_history,
     )
